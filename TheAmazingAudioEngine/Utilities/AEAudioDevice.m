@@ -71,6 +71,8 @@ NSString * const AEAudioDeviceAvailableDevicesChangedNotification = @"AEAudioDev
 }
 
 + (AEAudioDevice *)defaultOutputAudioDevice {
+    return nil;
+    // I never need this to be the default output and I wasted two hours trying to swizzle.
     AudioDeviceID deviceId;
     UInt32 size = sizeof(deviceId);
     AudioObjectPropertyAddress addr = {kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal};
