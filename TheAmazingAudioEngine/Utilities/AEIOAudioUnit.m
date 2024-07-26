@@ -292,7 +292,7 @@ struct _conversion_proc_arg_t {
         NSArray <AEAudioDevice *> * availableDevices = AEAudioDevice.availableAudioDevices;
         if ( ![availableDevices containsObject:weakSelf.audioDevice] ) {
             // Replace audio device with new default if device disappears
-            weakSelf.audioDevice = weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice;
+//            weakSelf.audioDevice = weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice;
         }
     }];
 #endif
