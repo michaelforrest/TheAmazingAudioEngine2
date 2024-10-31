@@ -285,13 +285,16 @@ struct _conversion_proc_arg_t {
     self.defaultDeviceObserverToken = [NSNotificationCenter.defaultCenter addObserverForName:self.outputEnabled ? AEAudioDeviceDefaultOutputDeviceChangedNotification : AEAudioDeviceDefaultInputDeviceChangedNotification object:nil queue:nil usingBlock:^(NSNotification * note) {
         if ( weakSelf.audioDevice.isDefault ) {
             // Replace audio device with new default
-            weakSelf.audioDevice = weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice;
+//            weakSelf.audioDevice = weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice;
         }
     }];
     self.deviceAvailabilityObserverToken = [NSNotificationCenter.defaultCenter addObserverForName:AEAudioDeviceAvailableDevicesChangedNotification object:nil queue:nil usingBlock:^(NSNotification * note) {
         NSArray <AEAudioDevice *> * availableDevices = AEAudioDevice.availableAudioDevices;
         if ( ![availableDevices containsObject:weakSelf.audioDevice] ) {
             // Replace audio device with new default if device disappears
+#if DEBUG
+            NSLog(@"Replacing default audio output with %@", weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice);
+#endif
 //            weakSelf.audioDevice = weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice;
         }
     }];
