@@ -12,7 +12,7 @@
 #import <AVFoundation/AVFoundation.h>
 
 #if TARGET_OS_IPHONE
-#import <MobileCoreServices/UTCoreTypes.h>
+#import <MobileCoreServices/MobileCoreServices.h>
 #import <UIKit/UIKit.h>
 #else
 #import <AppKit/AppKit.h>
@@ -62,7 +62,78 @@ typedef struct {
             [[NSNotificationCenter defaultCenter] postNotificationName:AEAudioPasteboardChangedNotification object:nil];
         }];
     });
+#else
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // NSPasteboard does not send change notifications by default. We need to poll for changes.
+        __block NSInteger lastChangeCount = [[NSPasteboard generalPasteboard] changeCount];
+        NSTimer * pasteboardPollingTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer * _Nonnull timer) {
+            NSInteger changeCount = [[NSPasteboard generalPasteboard] changeCount];
+            if ( changeCount != lastChangeCount ) {
+                lastChangeCount = changeCount;
+                [[NSNotificationCenter defaultCenter] postNotificationName:AEAudioPasteboardChangedNotification object:nil];
+            }
+        }];
+        pasteboardPollingTimer.tolerance = 1.0;
+        [[NSRunLoop mainRunLoop] addTimer:pasteboardPollingTimer forMode:NSRunLoopCommonModes];
+    });
 #endif
+}
+
++ (BOOL)hasAudioOnPasteboard {
+#if TARGET_OS_IPHONE
+    UIPasteboard * pasteboard = UIPasteboard.generalPasteboard;
+    return [pasteboard containsPasteboardTypes:[self audioUTTypes]] || [self hasFilesOfTypes:[self audioUTTypes]];
+#else
+    NSPasteboard * pasteboard = NSPasteboard.generalPasteboard;
+    return [pasteboard canReadItemWithDataConformingToTypes:[self audioUTTypes]] || [self hasFilesOfTypes:[self audioUTTypes]];
+#endif
+}
+
++ (BOOL)hasFilesOfTypes:(NSArray<NSString *> *)types {
+#if TARGET_OS_IPHONE
+    if ( ![UIPasteboard.generalPasteboard containsPasteboardTypes:@[(NSString *)kUTTypeFileURL]] ) {
+        return NO;
+    }
+    NSArray *items = UIPasteboard.generalPasteboard.items;
+#else
+    if ( ![NSPasteboard.generalPasteboard canReadItemWithDataConformingToTypes:@[(NSString *)kUTTypeFileURL]] ) {
+        return NO;
+    }
+    NSArray *items = [NSPasteboard.generalPasteboard pasteboardItems];
+#endif
+    
+    for ( id item in items ) {
+        NSURL *fileURL = nil;
+#if TARGET_OS_IPHONE
+        fileURL = [NSURL URLWithString:[[NSString alloc] initWithData:item[(NSString *)kUTTypeFileURL] encoding:NSUTF8StringEncoding]];
+#else
+        fileURL = [NSURL URLWithString:[item stringForType:(NSString *)kUTTypeFileURL]];
+#endif
+        if ( fileURL && [self isFileURL:fileURL ofTypes:types] ) {
+            return YES;
+        }
+    }
+    
+    return NO;
+}
+
++ (BOOL)isFileURL:(NSURL *)url ofTypes:(NSArray<NSString *> *)types {
+    NSError *error = nil;
+    NSString *fileType = nil;
+    [url getResourceValue:&fileType forKey:NSURLTypeIdentifierKey error:&error];
+
+    if ( error != nil ) {
+        return NO;
+    }
+
+    for ( NSString *type in types ) {
+        if ( UTTypeConformsTo((__bridge CFStringRef)fileType, (__bridge CFStringRef)type) ) {
+            return YES;
+        }
+    }
+
+    return NO;
 }
 
 + (void)loadInfoForAudioPasteboardItemWithCompletionBlock:(void (^)(NSDictionary *))block {
@@ -252,48 +323,71 @@ typedef struct {
 
 #pragma mark - Helpers
 
++ (NSArray <NSString *> *)audioUTTypes {
+    return @[(NSString *)kUTTypeAudio, AVFileTypeWAVE, AVFileTypeAIFC, AVFileTypeAIFF, AVFileTypeAppleM4A, AVFileTypeAC3, AVFileTypeMPEGLayer3, AVFileTypeCoreAudioFormat];
+}
+
 + (NSData *)dataForAudioOnPasteboard {
+    NSArray * supportedTypes = [self audioUTTypes];
+
 #if TARGET_OS_IPHONE
     UIPasteboard * pasteboard = UIPasteboard.generalPasteboard;
+    if ( [pasteboard containsPasteboardTypes:supportedTypes] ) {
+        for ( NSString * type in supportedTypes ) {
+            NSIndexSet * itemSet = [pasteboard itemSetWithPasteboardTypes:@[type]];
+            if ( itemSet.count > 0 ) {
+                NSArray <NSData *> * dataArray = [pasteboard dataForPasteboardType:type inItemSet:itemSet];
+                if ( dataArray.count == 1 ) {
+                    return dataArray.firstObject;
+                } else if ( dataArray.count > 1 ) {
+                    NSMutableData * data = [NSMutableData data];
+                    for ( NSData * block in dataArray ) {
+                        [data appendData:block];
+                    }
+                    return data;
+                }
+            }
+        }
+    }
+    
+    if ( ![pasteboard containsPasteboardTypes:@[(NSString *)kUTTypeFileURL]] ) {
+        return NULL;
+    }
+    
+    NSArray *items = UIPasteboard.generalPasteboard.items;
 #else
     NSPasteboard * pasteboard = NSPasteboard.generalPasteboard;
-#endif
-    
-    NSArray * supportedTypes = @[(NSString *)kUTTypeAudio, AVFileTypeWAVE, AVFileTypeAIFC, AVFileTypeAIFF, AVFileTypeAppleM4A, AVFileTypeAC3, AVFileTypeMPEGLayer3, AVFileTypeCoreAudioFormat];
-    
-#if TARGET_OS_IPHONE
-    if ( ![pasteboard containsPasteboardTypes:supportedTypes] ) {
-        return NULL;
-    }
-#else
-    if ( ![pasteboard canReadItemWithDataConformingToTypes:supportedTypes] ) {
-        return NULL;
-    }
-#endif
-    
-    for ( NSString * type in supportedTypes ) {
-#if TARGET_OS_IPHONE
-        NSIndexSet * itemSet = [pasteboard itemSetWithPasteboardTypes:@[type]];
-        if ( itemSet.count > 0 ) {
-            NSArray <NSData *> * dataArray = [pasteboard dataForPasteboardType:type inItemSet:itemSet];
-            if ( dataArray.count == 1 ) {
-                return dataArray.firstObject;
-            } else if ( dataArray.count > 1 ) {
-                NSMutableData * data = [NSMutableData data];
-                for ( NSData * block in dataArray ) {
-                    [data appendData:block];
-                }
+    if ( [pasteboard canReadItemWithDataConformingToTypes:supportedTypes] ) {
+        for ( NSString * type in supportedTypes ) {
+            NSData * data = [pasteboard dataForType:type];
+            if ( data ) {
                 return data;
             }
         }
-#else
-        NSData * data = [pasteboard dataForType:type];
-        if ( data ) {
-            return data;
-        }
-#endif
+    }
+    if ( ![pasteboard canReadItemWithDataConformingToTypes:@[(NSString *)kUTTypeFileURL]] ) {
+        return NULL;
     }
     
+    NSArray *items = [NSPasteboard.generalPasteboard pasteboardItems];
+#endif
+    
+    // Handle file URLs
+    for ( id item in items ) {
+        NSURL *fileURL = nil;
+#if TARGET_OS_IPHONE
+        NSString *urlString = [[NSString alloc] initWithData:item[(NSString *)kUTTypeFileURL] encoding:NSUTF8StringEncoding];
+#else
+        NSString *urlString = [item stringForType:(NSString *)kUTTypeFileURL];
+#endif
+        if ( urlString ) {
+            fileURL = [NSURL URLWithString:urlString];
+        }
+        if ( fileURL && [self isFileURL:fileURL ofTypes:supportedTypes] ) {
+            return [NSData dataWithContentsOfURL:fileURL];
+        }
+    }
+
     return NULL;
 }
 
