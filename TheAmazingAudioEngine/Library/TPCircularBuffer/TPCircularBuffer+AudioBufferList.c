@@ -234,8 +234,9 @@ static void _TPCircularBufferCopyOutBufferListFrames(TPCircularBuffer *buffer, U
         
         if ( outputBufferList ) {
             for ( int i=0; i<outputBufferList->mNumberBuffers; i++ ) {
+                UInt32 sourceBufferIndex = bufferList->mNumberBuffers == outputBufferList->mNumberBuffers ? i : 0;  // hacky because I couldn't find the right MIN func
                 assert(bytesCopied + bytesToCopy <= outputBufferList->mBuffers[i].mDataByteSize);
-                memcpy((char*)outputBufferList->mBuffers[i].mData + bytesCopied, bufferList->mBuffers[i].mData, bytesToCopy);
+                memcpy((char*)outputBufferList->mBuffers[i].mData + bytesCopied, bufferList->mBuffers[sourceBufferIndex].mData, bytesToCopy);
             }
         }
         
