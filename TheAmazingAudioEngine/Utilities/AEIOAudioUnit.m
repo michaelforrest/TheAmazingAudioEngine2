@@ -64,7 +64,6 @@ static const UInt32 kInputRingBufferDiscardCrossfade = 256;
 @property (nonatomic) BOOL hasSetInitialStreamFormat;
 @property (nonatomic, readwrite) int numberOfOutputChannels;
 @property (nonatomic, readwrite) int numberOfInputChannels;
-@property (nonatomic) AudioTimeStamp inputTimestamp;
 @property (nonatomic) BOOL needsInputGainScaling;
 @property (nonatomic) float currentInputGain;
 #if TARGET_OS_IPHONE
@@ -73,6 +72,7 @@ static const UInt32 kInputRingBufferDiscardCrossfade = 256;
 @property (nonatomic, strong) id routeChangeObserverToken;
 @property (nonatomic) NSTimeInterval outputLatency;
 @property (nonatomic) NSTimeInterval inputLatency;
+@property (nonatomic) AudioTimeStamp inputTimestamp;
 #else
 @property (nonatomic, strong) id defaultDeviceObserverToken;
 @property (nonatomic, strong) id deviceAvailabilityObserverToken;
@@ -88,7 +88,8 @@ static const UInt32 kInputRingBufferDiscardCrossfade = 256;
 #if TARGET_OS_OSX
 struct _conversion_proc_arg_t {
     __unsafe_unretained AEIOAudioUnit * THIS;
-    const AudioTimeStamp * timestamp;
+    const AudioTimeStamp * inTimestamp;
+    AudioTimeStamp * outTimestamp;
 };
 #endif
 
@@ -381,7 +382,7 @@ AudioUnit _Nonnull AEIOAudioUnitGetAudioUnit(__unsafe_unretained AEIOAudioUnit *
 }
 
 OSStatus AEIOAudioUnitRenderInput(__unsafe_unretained AEIOAudioUnit * _Nonnull THIS,
-                                  const AudioBufferList * _Nonnull buffer, UInt32 frames) {
+                                  const AudioBufferList * _Nonnull buffer, UInt32 frames, AudioTimeStamp * outTimestamp) {
     
     if ( !THIS->_inputEnabled || THIS->_numberOfInputChannels == 0 ) {
         AEAudioBufferListSilence(buffer, 0, frames);
@@ -393,20 +394,21 @@ OSStatus AEIOAudioUnitRenderInput(__unsafe_unretained AEIOAudioUnit * _Nonnull T
 #if TARGET_OS_OSX
     if ( THIS->_audioConverter ) {
         AEAudioBufferListCopyOnStack(mutableAbl, buffer, 0);
-        status = AudioConverterFillComplexBuffer(THIS->_audioConverter, AEIOAudioUnitConversionDataProc, &(struct _conversion_proc_arg_t){THIS}, &frames, mutableAbl, NULL);
+        status = AudioConverterFillComplexBuffer(THIS->_audioConverter, AEIOAudioUnitConversionDataProc, &(struct _conversion_proc_arg_t){THIS, NULL, outTimestamp}, &frames, mutableAbl, NULL);
         if ( status == kEmptyBufferErr ) {
             AEAudioBufferListSilence(buffer, 0, frames);
         } else {
             AECheckOSStatus(status, "AudioConverterFillComplexBuffer");
         }
     } else {
-        AEIOAudioUnitDequeueRingBuffer(THIS, &frames, buffer);
+        AEIOAudioUnitDequeueRingBuffer(THIS, &frames, buffer, outTimestamp);
     }
 #else
     AudioUnitRenderActionFlags flags = 0;
     AudioTimeStamp timestamp = THIS->_inputTimestamp;
     AEAudioBufferListCopyOnStack(mutableAbl, buffer, 0);
     status = AudioUnitRender(THIS->_audioUnit, &flags, &timestamp, 1, frames, mutableAbl);
+    if ( outTimestamp ) *outTimestamp = timestamp;
     AECheckOSStatus(status, "AudioUnitRender");
 #endif
     
@@ -419,10 +421,6 @@ OSStatus AEIOAudioUnitRenderInput(__unsafe_unretained AEIOAudioUnit * _Nonnull T
 
 BOOL AEIOAudioUnitGetInputEnabled(__unsafe_unretained AEIOAudioUnit * _Nonnull THIS) {
     return THIS->_inputEnabled && THIS->_numberOfInputChannels > 0;
-}
-
-AudioTimeStamp AEIOAudioUnitGetInputTimestamp(__unsafe_unretained AEIOAudioUnit * _Nonnull THIS) {
-    return THIS->_inputTimestamp;
 }
 
 double AEIOAudioUnitGetSampleRate(__unsafe_unretained AEIOAudioUnit * _Nonnull THIS) {
@@ -535,6 +533,8 @@ AESeconds AEIOAudioUnitGetOutputLatency(__unsafe_unretained AEIOAudioUnit * _Non
 - (void)setInputEnabled:(BOOL)inputEnabled {
     if ( _inputEnabled == inputEnabled ) return;
     
+    _inputEnabled = inputEnabled;
+    
     if ( _audioUnit ) {
         BOOL wasRunning = self.running;
         AECheckOSStatus(AudioUnitUninitialize(_audioUnit), "AudioUnitUninitialize");
@@ -548,8 +548,6 @@ AESeconds AEIOAudioUnitGetOutputLatency(__unsafe_unretained AEIOAudioUnit * _Non
             }
         }
     }
-    
-    _inputEnabled = inputEnabled;
 }
 
 - (void)setInputGain:(double)inputGain {
@@ -663,12 +661,12 @@ static OSStatus AEIOAudioUnitInputCallback(void *inRefCon, AudioUnitRenderAction
     // Grab timestamp
     __unsafe_unretained AEIOAudioUnit * THIS = (__bridge AEIOAudioUnit *)inRefCon;
     
-    AudioTimeStamp timestamp = *inTimeStamp;
-    
 #if TARGET_OS_IPHONE
+    AudioTimeStamp timestamp = *inTimeStamp;
     if ( THIS->_latencyCompensation ) {
         timestamp.mHostTime -= AEHostTicksFromSeconds(THIS->_inputLatency);
     }
+    THIS->_inputTimestamp = timestamp;
 #else
     // Render now, into saved buffer
     AudioBufferList * abl = AECircularBufferPrepareEmptyAudioBufferList(&THIS->_ringBuffer, inNumberFrames, inTimeStamp);
@@ -677,7 +675,6 @@ static OSStatus AEIOAudioUnitInputCallback(void *inRefCon, AudioUnitRenderAction
     }
 #endif
     
-    THIS->_inputTimestamp = timestamp;
     return noErr;
 }
 
@@ -719,12 +716,12 @@ static OSStatus AEIOAudioUnitConversionDataProc(AudioConverterRef inAudioConvert
     
     if ( THIS->_inputEnabled ) {
         // Input
-        AEIOAudioUnitDequeueRingBuffer(THIS, ioNumberDataPackets, ioData);
+        AEIOAudioUnitDequeueRingBuffer(THIS, ioNumberDataPackets, ioData, ((struct _conversion_proc_arg_t *)inUserData)->outTimestamp);
     } else {
         // Output
         __unsafe_unretained AEIOAudioUnitRenderBlock renderBlock = (__bridge AEIOAudioUnitRenderBlock)AEManagedValueGetValue(THIS->_renderBlockValue);
         if ( renderBlock ) {
-            renderBlock(THIS->_scratchBuffer, *ioNumberDataPackets, ((struct _conversion_proc_arg_t *)inUserData)->timestamp);
+            renderBlock(THIS->_scratchBuffer, *ioNumberDataPackets, ((struct _conversion_proc_arg_t *)inUserData)->inTimestamp);
         } else {
             AEAudioBufferListSilence(THIS->_scratchBuffer, 0, *ioNumberDataPackets);
         }
@@ -732,7 +729,7 @@ static OSStatus AEIOAudioUnitConversionDataProc(AudioConverterRef inAudioConvert
     return noErr;
 }
 
-static OSStatus AEIOAudioUnitDequeueRingBuffer(__unsafe_unretained AEIOAudioUnit * THIS, UInt32 * frames, const AudioBufferList * buffer) {
+static OSStatus AEIOAudioUnitDequeueRingBuffer(__unsafe_unretained AEIOAudioUnit * THIS, UInt32 * frames, const AudioBufferList * buffer, AudioTimeStamp * outTimestamp) {
     UInt32 available = AECircularBufferPeek(&THIS->_ringBuffer, NULL);
     if ( available < *frames ) {
         #ifdef DEBUG
@@ -761,7 +758,7 @@ static OSStatus AEIOAudioUnitDequeueRingBuffer(__unsafe_unretained AEIOAudioUnit
         THIS->_lowWaterMark = excess;
         THIS->_lowWaterMarkSampleCount = *frames;
     }
-    AECircularBufferDequeue(&THIS->_ringBuffer, frames, buffer, NULL);
+    AECircularBufferDequeue(&THIS->_ringBuffer, frames, buffer, outTimestamp);
     if ( crossfade ) {
         // Blend discarded audio with new audio, crossfaded to avoid glitches
         for ( int i=0; i<buffer->mNumberBuffers; i++ ) {
@@ -778,6 +775,7 @@ static OSStatus AEIOAudioUnitDequeueRingBuffer(__unsafe_unretained AEIOAudioUnit
     BOOL hasChanges = NO;
     BOOL iaaInput = NO;
     BOOL iaaOutput = NO;
+    double priorSampleRate = self.currentSampleRate;
     
 #if TARGET_OS_IPHONE
     UInt32 iaaConnected = NO;
@@ -812,7 +810,7 @@ static OSStatus AEIOAudioUnitDequeueRingBuffer(__unsafe_unretained AEIOAudioUnit
         BOOL hasOutputChanges = NO;
         
         double newSampleRate = self.sampleRate == 0 ? asbd.mSampleRate : self.sampleRate;
-        if ( fabs(_currentSampleRate - newSampleRate) > DBL_EPSILON ) {
+        if ( fabs(priorSampleRate - newSampleRate) > DBL_EPSILON ) {
             hasChanges = hasOutputChanges = YES;
             self.currentSampleRate = newSampleRate;
         }
@@ -878,10 +876,10 @@ static OSStatus AEIOAudioUnitDequeueRingBuffer(__unsafe_unretained AEIOAudioUnit
             self.numberOfInputChannels = channels;
         }
         
-        if ( !self.outputEnabled ) {
-            double newSampleRate = self.sampleRate == 0 ? asbd.mSampleRate : self.sampleRate;
-            if ( fabs(_currentSampleRate - newSampleRate) > DBL_EPSILON ) {
-                hasChanges = hasInputChanges = YES;
+        double newSampleRate = self.sampleRate == 0 ? asbd.mSampleRate : self.sampleRate;
+        if ( fabs(priorSampleRate - newSampleRate) > DBL_EPSILON ) {
+            hasChanges = hasInputChanges = YES;
+            if ( !self.outputEnabled ) {
                 self.currentSampleRate = newSampleRate;
             }
         }
@@ -935,7 +933,9 @@ static OSStatus AEIOAudioUnitDequeueRingBuffer(__unsafe_unretained AEIOAudioUnit
             
             AECheckOSStatus(AudioUnitSetProperty(_audioUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1, &asbd, sizeof(asbd)), "AudioUnitSetProperty(kAudioUnitProperty_StreamFormat)");
         } else {
+#if TARGET_OS_IPHONE
             memset(&_inputTimestamp, 0, sizeof(_inputTimestamp));
+#endif
         }
     }
     

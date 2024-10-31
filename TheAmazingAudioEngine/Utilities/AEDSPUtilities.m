@@ -473,7 +473,7 @@ static void _AEDSPFFTConvolutionExecute(AEDSPFFTConvolution * setup, float * inp
     }
     
     if ( outputLength > 0 ) {
-        memset(output, 0, outputLength * sizeof(float));
+        vDSP_vclr(output, 1, outputLength);
     }
 }
 
@@ -516,7 +516,14 @@ int AEDSPFindPeaksInDistribution(float * distribution, int start, int end, float
         
         if ( seekMax ) {
             if ( sample < max-trailingDelta && lastValley < max-leadingDelta ) {
-                if ( !minimumSeparation || lastPeak == -1 || i-lastPeak >= minimumSeparation ) {
+                BOOL withinMinimumSeparationDistance = minimumSeparation && lastPeak != -1 && i-lastPeak < minimumSeparation;
+                if ( withinMinimumSeparationDistance && distribution[lastPeak] < max ) {
+                    // Within the min separation distance, but the last peak is lower, so ignore it
+                    withinMinimumSeparationDistance = NO;
+                    peakCount--;
+                }
+                
+                if ( !withinMinimumSeparationDistance ) {
                     if ( sort && peakCount >= bufferSize ) {
                         bufferSize += 128;
                         results = realloc(results, sizeof(*results)*bufferSize);
@@ -568,3 +575,31 @@ int AEDSPFindPeaksInDistribution(float * distribution, int start, int end, float
     
     return MIN(maxPeaks, peakCount);
 }
+
+int AEDSPFindPeakOnset(int index, float * distribution, int length, int maxOffset, int maxStep, float minimumGradient) {
+    // Descend backwards through RMS signal to find onset
+    float peakValue = distribution[index];
+    if ( !peakValue ) return index;
+    
+    int minIndex = MAX(0, index-maxOffset);
+    while ( index > minIndex ) {
+        BOOL pass = NO;
+        
+        // Look backwards 'maxStep' samples, or less, and look for a value that satisfies the minimum gradient condition
+        for ( int step = MIN(index-minIndex, maxStep); step>0; step-- ) {
+            float relativeGradient = (distribution[index] - distribution[index-step]) / peakValue;
+            if ( relativeGradient > minimumGradient ) {
+                pass = YES;
+                index = index - step;
+                break;
+            }
+        }
+        
+        if ( !pass ) {
+            // We've reached the bottom of the peak
+            break;
+        }
+    }
+    return index;
+}
+
