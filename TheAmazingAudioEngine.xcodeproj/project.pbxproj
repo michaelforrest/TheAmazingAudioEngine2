@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -453,7 +453,12 @@
 		4CE5F4CD1CD3169C00322F03 /* AEAudioThreadEndpoint.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = AEAudioThreadEndpoint.m; sourceTree = "<group>"; };
 		4CF30DD2289227C6001B29BD /* AEAudioDevice.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AEAudioDevice.h; sourceTree = "<group>"; };
 		4CF30DD3289227C6001B29BD /* AEAudioDevice.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AEAudioDevice.m; sourceTree = "<group>"; };
+		ACBDCD3C2E0D580700DD7774 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		ACBDCD482E0D580700DD7774 /* Sources */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = Sources; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		4C97793128F50197000B2C47 /* Frameworks */ = {
@@ -534,6 +539,8 @@
 		4CDCAC8F1CA25A29008AAEF1 = {
 			isa = PBXGroup;
 			children = (
+				ACBDCD3C2E0D580700DD7774 /* Package.swift */,
+				ACBDCD482E0D580700DD7774 /* Sources */,
 				4CDCAC9A1CA25A29008AAEF1 /* TheAmazingAudioEngine */,
 				4CDCACA91CA25A6E008AAEF1 /* Tests */,
 				4CDCAC991CA25A29008AAEF1 /* Products */,
