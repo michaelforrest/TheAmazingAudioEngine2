@@ -148,6 +148,14 @@ OSStatus AEIOAudioUnitRenderInput(__unsafe_unretained AEIOAudioUnit * _Nonnull u
                                   AudioTimeStamp * _Nullable outTimestamp);
 
 /*!
+ * Determine whether unit is running
+ *
+ * @param unit The unit instance
+ * @return Whether the unit is running
+ */
+BOOL AEIOAudioUnitIsRunning(__unsafe_unretained AEIOAudioUnit * _Nonnull unit);
+
+/*!
  * Determine whether input is enabled
  *
  *  For use with input-enabled instances.
@@ -219,10 +227,6 @@ AESeconds AEIOAudioUnitGetOutputLatency(__unsafe_unretained AEIOAudioUnit * _Non
 //! Whether input is enabled. Note that changing this value will cause the audio unit to be uninitialized,
 //! reconfigured, and initialized again, temporarily interrupting audio rendering.
 @property (nonatomic) BOOL inputEnabled;
-
-//! The microphone gain, as power ratio. If the current audio session permits, this will be applied
-//! using AVAudioSession's gain controls. Otherwise, it will be applied by affecting the input signal directly.
-@property (nonatomic) double inputGain;
 
 //! The maximum number of input channels to support, or zero for unlimited
 @property (nonatomic) int maximumInputChannels;

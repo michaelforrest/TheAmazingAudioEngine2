@@ -25,7 +25,7 @@
 //
 
 #import "AEMainThreadEndpoint.h"
-#import "TPCircularBuffer.h"
+#import "TPCircularBuffer+MultiProducer.h"
 #import <mach/semaphore.h>
 #import <mach/task.h>
 #import <mach/mach_init.h>
@@ -38,9 +38,10 @@ static const int kMaxMessagesEachService = 20;
 static AEMainThreadEndpointThread * __sharedThread = nil;
 
 @interface AEMainThreadEndpoint () {
-    TPCircularBuffer _buffer;
+    TPMultiProducerBuffer _buffer;
     BOOL _hasPendingMainThreadMessages;
     pthread_mutex_t _mutex;
+    BOOL _mutexHeldByMainThread;
 }
 @property (nonatomic, copy) AEMainThreadEndpointHandler handler;
 @property (nonatomic) semaphore_t semaphore;
@@ -71,11 +72,15 @@ static AEMainThreadEndpointThread * __sharedThread = nil;
 }
 
 - (instancetype)initWithHandler:(AEMainThreadEndpointHandler)handler bufferCapacity:(size_t)bufferCapacity {
+    return [self initWithHandler:handler bufferCapacity:bufferCapacity producerCount:1];
+}
+
+- (instancetype)initWithHandler:(AEMainThreadEndpointHandler)handler bufferCapacity:(size_t)bufferCapacity producerCount:(int)producerCount {
     if ( !(self = [super init]) ) return nil;
     
     self.handler = handler;
     
-    if ( !TPCircularBufferInit(&_buffer, (int32_t)bufferCapacity) ) {
+    if ( !TPMultiProducerBufferInit(&_buffer, (int32_t)bufferCapacity, producerCount) ) {
         return nil;
     }
     
@@ -91,7 +96,7 @@ static AEMainThreadEndpointThread * __sharedThread = nil;
 
 - (void)dealloc {
     [self.thread removeEndpoint:self];
-    TPCircularBufferCleanup(&_buffer);
+    TPMultiProducerBufferCleanup(&_buffer);
     pthread_mutex_destroy(&_mutex);
 }
 
@@ -117,9 +122,10 @@ BOOL AEMainThreadEndpointSend(__unsafe_unretained AEMainThreadEndpoint * THIS, c
 void * AEMainThreadEndpointCreateMessage(__unsafe_unretained AEMainThreadEndpoint * THIS, size_t length) {
     
     // Get pointer to writable bytes
+    TPCircularBuffer * buffer = TPMultiProducerBufferGetProducerBuffer(&THIS->_buffer);
     int32_t size = (int32_t)(length + sizeof(size_t));
     int32_t availableBytes;
-    void * head = TPCircularBufferHead(&THIS->_buffer, &availableBytes);
+    void * head = TPCircularBufferHead(buffer, &availableBytes);
     if ( availableBytes < size ) {
         return NULL;
     }
@@ -134,59 +140,103 @@ void * AEMainThreadEndpointCreateMessage(__unsafe_unretained AEMainThreadEndpoin
 void AEMainThreadEndpointDispatchMessage(__unsafe_unretained AEMainThreadEndpoint * THIS) {
 
     // Get pointer to writable bytes
+    TPCircularBuffer * buffer = TPMultiProducerBufferGetProducerBuffer(&THIS->_buffer);
     int32_t availableBytes;
-    void * head = TPCircularBufferHead(&THIS->_buffer, &availableBytes);
+    void * head = TPCircularBufferHead(buffer, &availableBytes);
     size_t size = *((size_t*)head) + sizeof(size_t);
+    if ( availableBytes < size ) {
+        // Not enough space to write the message
+        return;
+    }
     
     // Mark as ready to read
-    TPCircularBufferProduce(&THIS->_buffer, (int32_t)size);
+    TPCircularBufferProduce(buffer, (int32_t)size);
     semaphore_signal(THIS->_semaphore);
 }
 
 - (void)serviceMessages {
-    if ( NSThread.isMainThread ) {
+    BOOL isMainThread = NSThread.isMainThread;
+    
+    if ( isMainThread ) {
         [self serviceBlockQueue];
     }
     
-    pthread_mutex_lock(&_mutex);
+    BOOL alreadyHeld = isMainThread && _mutexHeldByMainThread;
+    if ( !alreadyHeld ) {
+        pthread_mutex_lock(&_mutex);
+        if ( isMainThread ) _mutexHeldByMainThread = YES;
+    }
+    
+    TPCircularBuffer * buffer;
     for ( int i=0; i<kMaxMessagesEachService; i++ ) {
-        // Get pointer to readable bytes
-        int32_t availableBytes;
-        void * tail = TPCircularBufferTail(&_buffer, &availableBytes);
-        if ( availableBytes == 0 ) {
-            pthread_mutex_unlock(&_mutex);
-            return;
-        }
+        int byteCount = 0;
         
-        // Get length and data
-        size_t length = *((size_t*)tail);
-        void * data = length > 0 ? (tail + sizeof(size_t)) : NULL;
-        
-        if ( NSThread.isMainThread ) {
-            self.handler(data, length);
-        } else {
+        TPMultiProducerBufferIterateBuffers(&_buffer, buffer) {
+            // Get pointer to readable bytes
+            int32_t availableBytes;
+            void * tail = TPCircularBufferTail(buffer, &availableBytes);
+            if ( availableBytes < sizeof(size_t) ) {
+                continue;
+            }
+            byteCount += availableBytes;
+            
+            // Get length and data
+            size_t length = *((size_t*)tail);
+            void * data = length > 0 ? (tail + sizeof(size_t)) : NULL;
+            
+            if ( length > availableBytes - sizeof(size_t) ) {
+                NSLog(@"Invalid length: %zu (available: %d)", length, availableBytes);
+                TPCircularBufferConsume(buffer, availableBytes);
+                break;
+            }
+            
+            // Make local copy of data
             void * dataCopy = malloc(length);
             memcpy(dataCopy, data, length);
-            __weak typeof(self) weakSelf = self;
-            [self.mainThreadBlocks addObject:^{
-                // Run handler
-                weakSelf.handler(dataCopy, length);
+            
+            // Mark as read
+            TPCircularBufferConsume(buffer, (int32_t)(sizeof(size_t) + length));
+            
+            if ( isMainThread ) {
+                self.handler(dataCopy, length);
                 free(dataCopy);
-            }];
-            dispatch_async(dispatch_get_main_queue(), ^{ [self serviceBlockQueue]; });
+            } else {
+                __weak typeof(self) weakSelf = self;
+                [self.mainThreadBlocks addObject:^{
+                    // Run handler
+                    weakSelf.handler(dataCopy, length);
+                    free(dataCopy);
+                }];
+                dispatch_async(dispatch_get_main_queue(), ^{ [self serviceBlockQueue]; });
+            }
         }
         
-        // Mark as read
-        TPCircularBufferConsume(&_buffer, (int32_t)(sizeof(size_t) + length));
+        if ( byteCount == 0 ) {
+            break;
+        }
     }
-    pthread_mutex_unlock(&_mutex);
+    
+    if ( !alreadyHeld ) {
+        if ( isMainThread ) _mutexHeldByMainThread = NO;
+        pthread_mutex_unlock(&_mutex);
+    }
 }
 
 - (void)serviceBlockQueue {
-    pthread_mutex_lock(&_mutex);
+    BOOL isMainThread = NSThread.isMainThread;
+    BOOL alreadyHeld = isMainThread && _mutexHeldByMainThread;
+    if ( !alreadyHeld ) {
+        pthread_mutex_lock(&_mutex);
+        if ( isMainThread ) _mutexHeldByMainThread = YES;
+    }
+    
     NSArray <void (^)(void)> * mainThreadBlocks = self.mainThreadBlocks.copy;
     [self.mainThreadBlocks removeAllObjects];
-    pthread_mutex_unlock(&_mutex);
+    
+    if ( !alreadyHeld ) {
+        if ( isMainThread ) _mutexHeldByMainThread = NO;
+        pthread_mutex_unlock(&_mutex);
+    }
     
     for ( void (^block)(void) in mainThreadBlocks ) {
         block();

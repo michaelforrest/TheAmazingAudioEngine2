@@ -40,7 +40,7 @@
 @end
 
 @implementation AEAudioUnitInputModule
-@dynamic audioUnit, running, inputGain;
+@dynamic audioUnit, running;
 #if TARGET_OS_IPHONE
 @dynamic latencyCompensation;
 #endif
@@ -72,6 +72,7 @@
     
     self.numberOfInputChannels = self.ioUnit.numberOfInputChannels;
     self.processFunction = AEAudioUnitInputModuleProcess;
+    self.isActiveFunction = AEAudioUnitInputModuleIsActive;
     
 #if TARGET_OS_IPHONE
     self.latencyCompensation = YES;
@@ -131,14 +132,6 @@
     return self.ioUnit.audioUnit;
 }
 
-- (void)setInputGain:(double)inputGain {
-    self.ioUnit.inputGain = inputGain;
-}
-
-- (double)inputGain {
-    return self.ioUnit.inputGain;
-}
-
 #if TARGET_OS_IPHONE
 - (BOOL)latencyCompensation {
     return self.ioUnit.latencyCompensation;
@@ -152,6 +145,10 @@ AESeconds AEAudioUnitInputModuleGetInputLatency(__unsafe_unretained AEAudioUnitI
     return AEIOAudioUnitGetInputLatency(THIS->_ioUnit);
 }
 #endif
+
+static BOOL AEAudioUnitInputModuleIsActive(__unsafe_unretained AEAudioUnitInputModule * THIS) {
+    return AEIOAudioUnitIsRunning(THIS->_ioUnit) && AEIOAudioUnitGetInputEnabled(THIS->_ioUnit);
+}
 
 static void AEAudioUnitInputModuleProcess(__unsafe_unretained AEAudioUnitInputModule * THIS,
                                           const AERenderContext * _Nonnull context) {
