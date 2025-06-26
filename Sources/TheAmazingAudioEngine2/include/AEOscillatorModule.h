@@ -1,0 +1,1 @@
+../src/Modules/Generation/AEOscillatorModule.h

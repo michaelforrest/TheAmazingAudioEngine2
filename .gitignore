@@ -4,3 +4,4 @@ project.xcworkspace
 build
 .git
 TheAmazingAudioEngine.xcscmblueprint
+.build
