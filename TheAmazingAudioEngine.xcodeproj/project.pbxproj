@@ -316,6 +316,9 @@
 		4CE5F4D31CD3169C00322F03 /* AEAudioThreadEndpoint.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CE5F4CD1CD3169C00322F03 /* AEAudioThreadEndpoint.m */; };
 		4CF30DD4289227C6001B29BD /* AEAudioDevice.h in Headers */ = {isa = PBXBuildFile; fileRef = 4CF30DD2289227C6001B29BD /* AEAudioDevice.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		4CF30DD5289227C6001B29BD /* AEAudioDevice.m in Sources */ = {isa = PBXBuildFile; fileRef = 4CF30DD3289227C6001B29BD /* AEAudioDevice.m */; };
+		ACF690F62E0E905F0035C602 /* AESwiftHelpers.m in Sources */ = {isa = PBXBuildFile; fileRef = ACF690F52E0E905B0035C602 /* AESwiftHelpers.m */; };
+		ACF690F72E0E905F0035C602 /* AESwiftHelpers.m in Sources */ = {isa = PBXBuildFile; fileRef = ACF690F52E0E905B0035C602 /* AESwiftHelpers.m */; };
+		ACF690F82E0E905F0035C602 /* AESwiftHelpers.m in Sources */ = {isa = PBXBuildFile; fileRef = ACF690F52E0E905B0035C602 /* AESwiftHelpers.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -454,6 +457,8 @@
 		4CF30DD2289227C6001B29BD /* AEAudioDevice.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AEAudioDevice.h; sourceTree = "<group>"; };
 		4CF30DD3289227C6001B29BD /* AEAudioDevice.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AEAudioDevice.m; sourceTree = "<group>"; };
 		ACBDCD3C2E0D580700DD7774 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
+		ACF690F42E0E8EAC0035C602 /* AESwiftHelpers.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AESwiftHelpers.h; sourceTree = "<group>"; };
+		ACF690F52E0E905B0035C602 /* AESwiftHelpers.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AESwiftHelpers.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -664,6 +669,8 @@
 				4CE5A98C1D6C01800034D7F7 /* AEAudioPasteboard.m */,
 				4CF30DD2289227C6001B29BD /* AEAudioDevice.h */,
 				4CF30DD3289227C6001B29BD /* AEAudioDevice.m */,
+				ACF690F42E0E8EAC0035C602 /* AESwiftHelpers.h */,
+				ACF690F52E0E905B0035C602 /* AESwiftHelpers.m */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -1090,6 +1097,7 @@
 				4CB2F2FD1D49ABC6008F745F /* AETime.m in Sources */,
 				4C9F0F3B1CB265F90032903E /* AEModule.m in Sources */,
 				4C9F0F3C1CB265F90032903E /* AEDistortionModule.m in Sources */,
+				ACF690F82E0E905F0035C602 /* AESwiftHelpers.m in Sources */,
 				4CB2F2EB1D49ABC6008F745F /* AEBufferStack.m in Sources */,
 				4C9F0F3D1CB265F90032903E /* AEAudioUnitOutput.m in Sources */,
 				4C9F0F3E1CB265F90032903E /* AELowPassModule.m in Sources */,
@@ -1148,6 +1156,7 @@
 				4C9F0F861CB269C30032903E /* AEDistortionModule.m in Sources */,
 				4CB2F2EC1D49ABC6008F745F /* AEBufferStack.m in Sources */,
 				4C9F0F871CB269C30032903E /* AEAudioUnitOutput.m in Sources */,
+				ACF690F62E0E905F0035C602 /* AESwiftHelpers.m in Sources */,
 				4C9F0F881CB269C30032903E /* AELowPassModule.m in Sources */,
 				4C9F0F891CB269C30032903E /* AEHighPassModule.m in Sources */,
 				4C9F0F8A1CB269C30032903E /* AEVarispeedModule.m in Sources */,
@@ -1202,6 +1211,7 @@
 				4CDCAD591CA50366008AAEF1 /* AEAudioUnitInputModule.m in Sources */,
 				4CDCAD3C1CA3C31C008AAEF1 /* AEModule.m in Sources */,
 				4CDCAD7D1CA5484D008AAEF1 /* AEDistortionModule.m in Sources */,
+				ACF690F72E0E905F0035C602 /* AESwiftHelpers.m in Sources */,
 				4CDCADBB1CAC95A8008AAEF1 /* AEAudioUnitOutput.m in Sources */,
 				3071AEFF1DC970C500A8C7E7 /* AEAudioPasteboard.m in Sources */,
 				4C636E0D1D0D2E54005A380B /* AERealtimeWatchdog.m in Sources */,
