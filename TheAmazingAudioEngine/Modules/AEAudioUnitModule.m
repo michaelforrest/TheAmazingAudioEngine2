@@ -39,7 +39,6 @@
     BOOL _isClean;
 }
 @property (nonatomic, readwrite) AudioComponentDescription componentDescription;
-@property (nonatomic, readwrite) BOOL hasInput;
 @property (nonatomic) AEManagedValue * subrendererValue;
 #if TARGET_OS_IPHONE
 @property (nonatomic, strong) id mediaResetObserverToken;
@@ -47,6 +46,8 @@
 @end
 
 @implementation AEAudioUnitModule
+@synthesize audioUnit = _audioUnit;
+@synthesize hasInput = _hasInput;
 @dynamic subrenderer;
 
 - (instancetype)initWithRenderer:(AERenderer *)renderer
@@ -199,7 +200,7 @@ static void AEAudioUnitModuleProcess(__unsafe_unretained AEAudioUnitModule * THI
     }
 }
 
-static OSStatus audioUnitRenderCallback(void                       *inRefCon,
+OSStatus audioUnitRenderCallback(void                       *inRefCon,
                                         AudioUnitRenderActionFlags *ioActionFlags,
                                         const AudioTimeStamp       *inTimeStamp,
                                         UInt32                      inBusNumber,

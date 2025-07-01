@@ -39,7 +39,12 @@ extern "C" {
  *  For generator Audio Units, this module will push one buffer onto the stack during
  *  processing. For effect units, it will pop and and push one (i.e. process in place).
  */
-@interface AEAudioUnitModule : AEModule
+@interface AEAudioUnitModule : AEModule{
+@public
+    AudioUnit _Nonnull  _audioUnit;
+    BOOL _hasInput;
+    
+}
 
 /*!
  * Default initializer
@@ -124,10 +129,10 @@ AudioUnit _Nonnull AEAudioUnitModuleGetAudioUnit(__unsafe_unretained AEAudioUnit
 @property (nonatomic, readonly) AudioComponentDescription componentDescription;
 
 //! The audio unit
-@property (nonatomic, readonly) AudioUnit _Nonnull audioUnit;
+@property (nonatomic, readwrite) AudioUnit _Nonnull audioUnit;
 
 //! Whether the audio unit processes input (and thus will process buffers in place, rather than pushing new buffers)
-@property (nonatomic, readonly) BOOL hasInput;
+@property (nonatomic, readwrite) BOOL hasInput;
 
 //! Wet/dry amount, for use with effect audio unit types. 0.0-1.0; 0.0 bypasses the effect entirely.
 @property (nonatomic) double wetDry;
@@ -137,6 +142,12 @@ AudioUnit _Nonnull AEAudioUnitModuleGetAudioUnit(__unsafe_unretained AEAudioUnit
 @property (nonatomic, strong) AERenderer * _Nullable subrenderer;
 
 @end
+OSStatus audioUnitRenderCallback(void                       *inRefCon,
+                                        AudioUnitRenderActionFlags *ioActionFlags,
+                                        const AudioTimeStamp       *inTimeStamp,
+                                        UInt32                      inBusNumber,
+                                        UInt32                      inNumberFrames,
+                                 AudioBufferList            *ioData);
 
 #ifdef __cplusplus
 }
