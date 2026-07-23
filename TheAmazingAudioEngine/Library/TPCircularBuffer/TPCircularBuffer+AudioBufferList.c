@@ -46,7 +46,11 @@ static inline long min(long a, long b) {
 AudioBufferList *TPCircularBufferPrepareEmptyAudioBufferList(TPCircularBuffer *buffer, int numberOfBuffers, int bytesPerBuffer, const AudioTimeStamp *inTimestamp) {
     int32_t availableBytes;
     TPCircularBufferABLBlockHeader *block = (TPCircularBufferABLBlockHeader*)TPCircularBufferHead(buffer, &availableBytes);
-    if ( !block || availableBytes < sizeof(TPCircularBufferABLBlockHeader)+((numberOfBuffers-1)*sizeof(AudioBuffer))+(numberOfBuffers*bytesPerBuffer) ) return NULL;
+    if ( !block || availableBytes < sizeof(TPCircularBufferABLBlockHeader)+((numberOfBuffers-1)*sizeof(AudioBuffer))+(numberOfBuffers*bytesPerBuffer) ){
+//        __builtin_debugtrap();
+        return NULL;
+//        breakpoint set -f TPCircularBuffer+AudioBufferList.c -l 51
+    }
     
     #ifdef DEBUG
     assert(!((unsigned long)block & 0xF) /* Beware unaligned accesses */);
@@ -67,6 +71,7 @@ AudioBufferList *TPCircularBufferPrepareEmptyAudioBufferList(TPCircularBuffer *b
         dataPtr = (char*)align16byte((long)dataPtr);
         
         if ( (dataPtr + bytesPerBuffer) - (char*)block > availableBytes ) {
+//            raise(SIGTRAP);
             return NULL;
         }
         
@@ -79,6 +84,7 @@ AudioBufferList *TPCircularBufferPrepareEmptyAudioBufferList(TPCircularBuffer *b
     
     // Make sure whole buffer (including timestamp and length value) is 16-byte aligned in length
     block->totalLength = (UInt32)align16byte(dataPtr - (char*)block);
+//    assert(block->totalLength < availableBytes);
     if ( block->totalLength > availableBytes ) {
         return NULL;
     }
@@ -133,7 +139,10 @@ bool TPCircularBufferCopyInAudioBufferList(TPCircularBuffer *buffer, const Audio
     if ( byteCount == 0 ) return true;
     
     AudioBufferList *bufferList = TPCircularBufferPrepareEmptyAudioBufferList(buffer, inBufferList->mNumberBuffers, byteCount, inTimestamp);
-    if ( !bufferList ) return false;
+    if ( !bufferList ){
+//        breakpoint set -f TPCircularBuffer+AudioBufferList.c -l 143
+        return false;
+    }
     
     for ( int i=0; i<bufferList->mNumberBuffers; i++ ) {
         memcpy(bufferList->mBuffers[i].mData, inBufferList->mBuffers[i].mData, byteCount);

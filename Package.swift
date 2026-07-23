@@ -5,6 +5,10 @@ import PackageDescription
 
 let package = Package(
     name: "TheAmazingAudioEngine2",
+    platforms: [
+        .macOS(.v14),
+        .iOS(.v15)
+    ],
     products: [
         .library(
             name: "TheAmazingAudioEngine2",
@@ -12,11 +16,25 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "AERealtimeWatchdog",
+            path: "Sources/AERealtimeWatchdog",
+            publicHeadersPath: "include",
+            cSettings: [
+                .unsafeFlags(["-fno-objc-arc"]),
+            ]
+        ),
+        .target(
             name: "TheAmazingAudioEngine2",
+            dependencies: [
+                "AERealtimeWatchdog"
+            ],
             path: "Sources/TheAmazingAudioEngine2",
             exclude: [
                 "src/Modules/Processing/AESampleRateConverter.m",
                 "src/Modules/Generation/AEAudiobusInputModule.m",
+                "src/Utilities/AERealtimeWatchdog.m",
+                "src/Utilities/AERealtimeWatchdog-arm64.s",
+                "src/Utilities/AERealtimeWatchdog-simulator-x86_64.s",
             ],
             publicHeadersPath: "include",
             cSettings: [
@@ -36,5 +54,6 @@ let package = Package(
             name: "TheAmazingAudioEngine2Tests",
             dependencies: ["TheAmazingAudioEngine2"]
         ),
-    ]
+    ],
+    cxxLanguageStandard: .cxx17
 )
