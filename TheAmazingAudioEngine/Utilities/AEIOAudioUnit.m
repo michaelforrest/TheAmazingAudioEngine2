@@ -165,7 +165,7 @@ struct _conversion_proc_arg_t {
 #if TARGET_OS_OSX
     // Set the device
     AudioObjectID deviceId = self.audioDevice.objectID;
-    result = AudioUnitSetProperty(_audioUnit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &deviceId, sizeof(deviceId));
+    result = AudioUnitSetProperty(_audioUnit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &deviceId, sizeof(deviceId)); // can result in a mic access request
     if ( !AECheckOSStatus(result, "AudioUnitSetProperty(kAudioOutputUnitProperty_CurrentDevice)") ) {
         if ( error ) *error = [NSError errorWithDomain:NSOSStatusErrorDomain code:result
                                               userInfo:@{ NSLocalizedDescriptionKey: @"Unable to set device" }];
@@ -286,8 +286,14 @@ struct _conversion_proc_arg_t {
         NSArray <AEAudioDevice *> * availableDevices = AEAudioDevice.availableAudioDevices;
         if ( ![availableDevices containsObject:weakSelf.audioDevice] ) {
             // Replace audio device with new default if device disappears
+<<<<<<< Updated upstream
 #if DEBUG
             NSLog(@"Replacing default audio output with %@", weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice);
+=======
+            weakSelf.audioDevice = weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice;
+#if DEBUG
+//            NSLog(@"Replacing default audio output with %@", weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice);
+>>>>>>> Stashed changes
 #endif
 //            weakSelf.audioDevice = weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice;
         }
