@@ -70,6 +70,7 @@ static const UInt32 kInputRingBufferDiscardCrossfade = 256;
 #else
 @property (nonatomic, strong) id defaultDeviceObserverToken;
 @property (nonatomic, strong) id deviceAvailabilityObserverToken;
+@property (nonatomic) BOOL stoppedForMissingDevice;
 @property (nonatomic) AudioConverterRef audioConverter;
 @property (nonatomic) UInt32 lowWaterMark;
 @property (nonatomic) UInt32 lowWaterMarkSampleCount;
@@ -283,17 +284,7 @@ struct _conversion_proc_arg_t {
         }
     }];
     self.deviceAvailabilityObserverToken = [NSNotificationCenter.defaultCenter addObserverForName:AEAudioDeviceAvailableDevicesChangedNotification object:nil queue:nil usingBlock:^(NSNotification * note) {
-        NSArray <AEAudioDevice *> * availableDevices = AEAudioDevice.availableAudioDevices;
-        if ( ![availableDevices containsObject:weakSelf.audioDevice] ) {
-            // Replace audio device with new default if device disappears
-#if DEBUG
-            NSLog(@"Replacing default audio output with %@", weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice);
-#endif
-            weakSelf.audioDevice = weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice;
-
-//            NSLog(@"Replacing default audio output with %@", weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice);
-//            weakSelf.audioDevice = weakSelf.outputEnabled ? AEAudioDevice.defaultOutputAudioDevice : AEAudioDevice.defaultInputAudioDevice;
-        }
+        [weakSelf followAudioDevice:AEAudioDevice.availableAudioDevices];
     }];
 #endif
     
@@ -441,12 +432,38 @@ AESeconds AEIOAudioUnitGetOutputLatency(__unsafe_unretained AEIOAudioUnit * _Non
     return _audioDevice = self.inputEnabled ? [AEAudioDevice defaultInputAudioDevice] : [AEAudioDevice defaultOutputAudioDevice];
 }
 
+/// Keeps to the chosen device when it goes away (on sleep, say) instead of falling back to the
+/// default, which is often the built-in speakers and can feed back into a microphone. The unit
+/// stops while the device is missing and starts again on it when a device with its UID returns.
+- (void)followAudioDevice:(NSArray <AEAudioDevice *> *)availableDevices {
+    NSUInteger index = [availableDevices indexOfObject:_audioDevice];
+    if ( index == NSNotFound ) {
+        if ( self.running ) {
+#if DEBUG
+            NSLog(@"%@ went away: stopping until it comes back", _audioDevice.name);
+#endif
+            self.stoppedForMissingDevice = YES;
+            [self stop];
+        }
+        return;
+    }
+    if ( !self.stoppedForMissingDevice ) return;
+#if DEBUG
+    NSLog(@"%@ came back: starting again", _audioDevice.name);
+#endif
+    // The returning device can have a new object ID, so take the fresh one; this starts it again
+    self.audioDevice = availableDevices[index];
+}
+
 - (void)setAudioDevice:(AEAudioDevice *)audioDevice {
     _audioDevice = audioDevice;
-    
+    // A unit stopped for its missing device starts on whichever device it's given next
+    BOOL resume = self.stoppedForMissingDevice;
+    self.stoppedForMissingDevice = NO;
+
     if ( _audioUnit ) {
-        BOOL wasRunning = self.running;
-        if ( wasRunning ) {
+        BOOL wasRunning = self.running || resume;
+        if ( self.running ) {
             [self stop];
         }
         AudioObjectID deviceId = audioDevice.objectID;
